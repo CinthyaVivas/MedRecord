@@ -1,0 +1,31 @@
+# Entornos virtuales de Python
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+
+# Variables de entorno y secretos (NUNCA subir)
+.env
+.env.*
+!.env.example
+
+# Frontend (Node / Vite)
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Logs
+logs/
+*.log
+
+# Editores y sistema
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Base de datos local
+*.sqlite3
