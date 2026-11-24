@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiRequest } from '../api/client';
+import { consultarCatalogos } from '../api/catalogos';
 import { registrarCita } from '../api/citas';
 import { formatearFechaISO } from '../utils/calendario';
 
@@ -7,28 +7,35 @@ function RegistrarCita({ fechaInicial, onSuccess }) {
   const hoyISO = formatearFechaISO(new Date());
   const [form, setForm] = useState({
     medico: '', especialidad: '',
-    fecha: fechaInicial || hoyISO, hora: '', lugar: '', id_usuario: ''
+    fecha: fechaInicial || hoyISO, hora: '', lugar: ''
   });
-  const [usuarios, setUsuarios] = useState([]);
   const [error, setError] = useState('');
+  const [especialidades, setEspecialidades] = useState([]);
+  const [lugares, setLugares] = useState([]);
 
   useEffect(() => {
     let activo = true;
-    apiRequest('usuarios/')
-      .then((datos) => {
+    consultarCatalogos()
+      .then((catalogos) => {
         if (!activo) return;
-        setUsuarios(datos);
+        setEspecialidades(catalogos.especialidades);
+        setLugares(catalogos.lugares);
       })
       .catch(() => {
-        if (activo) setError('No se pudieron cargar los usuarios.');
+        if (activo) setError('No se pudieron cargar las especialidades y médicos.');
       });
-
     return () => {
       activo = false;
     };
   }, []);
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const medicosDisponibles = especialidades.find((e) => e.nombre === form.especialidad)?.medicos || [];
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    // Al cambiar de especialidad se limpia el médico, porque cada médico tiene la suya.
+    setForm({ ...form, [name]: value, ...(name === 'especialidad' ? { medico: '' } : {}) });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -46,25 +53,6 @@ function RegistrarCita({ fechaInicial, onSuccess }) {
       <h2>Registrar cita médica</h2>
       {error && <div className="alerta alerta-error">{error}</div>}
       <form onSubmit={handleSubmit} className="form-vertical">
-        <label className="campo-label" htmlFor="usuario-cita">Usuario asociado</label>
-        <select
-          id="usuario-cita"
-          name="id_usuario"
-          value={form.id_usuario}
-          onChange={handleChange}
-          required
-        >
-          <option value="">Selecciona un usuario</option>
-          {usuarios.map((usuario) => (
-            <option key={usuario.id_usuario} value={usuario.id_usuario}>
-              {usuario.nombre} {usuario.apellido}
-            </option>
-          ))}
-        </select>
-
-        <label className="campo-label">Médico</label>
-        <input name="medico" value={form.medico} onChange={handleChange} placeholder="Ej. Dra. Ana Pérez" />
-
         <label className="campo-label" htmlFor="especialidad-cita">Especialidad</label>
         <select
           id="especialidad-cita"
@@ -73,16 +61,25 @@ function RegistrarCita({ fechaInicial, onSuccess }) {
           onChange={handleChange}
         >
           <option value="">Selecciona una especialidad</option>
-          <option value="Medicina general">Medicina general</option>
-          <option value="Cardiología">Cardiología</option>
-          <option value="Dermatología">Dermatología</option>
-          <option value="Endocrinología">Endocrinología</option>
-          <option value="Ginecología">Ginecología</option>
-          <option value="Neurología">Neurología</option>
-          <option value="Oftalmología">Oftalmología</option>
-          <option value="Pediatría">Pediatría</option>
-          <option value="Psicología">Psicología</option>
-          <option value="Traumatología">Traumatología</option>
+          {especialidades.map((especialidad) => (
+            <option key={especialidad.nombre} value={especialidad.nombre}>{especialidad.nombre}</option>
+          ))}
+        </select>
+
+        <label className="campo-label" htmlFor="medico-cita">Médico</label>
+        <select
+          id="medico-cita"
+          name="medico"
+          value={form.medico}
+          onChange={handleChange}
+          disabled={!form.especialidad}
+        >
+          <option value="">
+            {form.especialidad ? 'Selecciona un médico' : 'Primero elige la especialidad'}
+          </option>
+          {medicosDisponibles.map((medico) => (
+            <option key={medico} value={medico}>{medico}</option>
+          ))}
         </select>
 
         <label className="campo-label">Fecha</label>
@@ -99,11 +96,9 @@ function RegistrarCita({ fechaInicial, onSuccess }) {
           onChange={handleChange}
         >
           <option value="">Selecciona un lugar</option>
-          <option value="Consultorio particular">Consultorio particular</option>
-          <option value="Clínica">Clínica</option>
-          <option value="Hospital">Hospital</option>
-          <option value="Centro médico">Centro médico</option>
-          <option value="Centro de salud">Centro de salud</option>
+          {lugares.map((lugar) => (
+            <option key={lugar} value={lugar}>{lugar}</option>
+          ))}
         </select>
 
         <button type="submit">Guardar cita</button>

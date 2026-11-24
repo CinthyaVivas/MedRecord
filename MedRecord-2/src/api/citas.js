@@ -2,9 +2,8 @@ import { apiRequest } from './client';
 import { formatearFechaISO } from '../utils/calendario';
 
 export async function registrarCita(datos) {
-  const { medico, especialidad, fecha, hora, lugar, id_usuario } = datos;
+  const { medico, especialidad, fecha, hora, lugar } = datos;
 
-  if (!id_usuario) throw new Error('Selecciona un usuario para asociar la cita.');
   if (!medico?.trim()) throw new Error('El médico es obligatorio.');
   if (!especialidad?.trim()) throw new Error('La especialidad es obligatoria.');
   if (!fecha) throw new Error('La fecha es obligatoria.');
@@ -21,7 +20,6 @@ export async function registrarCita(datos) {
   const cuerpo = {
     ...datos,
     paciente: '',
-    id_usuario: Number(id_usuario),
     estado: 'programada',
   };
 

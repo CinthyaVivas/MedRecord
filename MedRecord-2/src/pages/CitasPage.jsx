@@ -11,8 +11,6 @@ function CitasPage() {
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mes, setMes] = useState(hoy.getMonth() + 1);
   const [fechaSeleccionada, setFechaSeleccionada] = useState(formatearFechaISO(hoy));
-  const [busqueda, setBusqueda] = useState('');
-  const [terminoBuscado, setTerminoBuscado] = useState('');
   const [todasLasCitas, setTodasLasCitas] = useState([]);
   const [modalAbierto, setModalAbierto] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -28,12 +26,6 @@ function CitasPage() {
     () => todasLasCitas.filter((cita) => cita.fecha === fechaSeleccionada),
     [fechaSeleccionada, todasLasCitas]
   );
-  const resultadosBusqueda = useMemo(() => {
-    const termino = terminoBuscado.toLocaleLowerCase();
-    return todasLasCitas.filter((cita) =>
-      (cita.paciente || '').toLocaleLowerCase().includes(termino)
-    );
-  }, [terminoBuscado, todasLasCitas]);
 
   useEffect(() => {
     let activo = true;
@@ -59,11 +51,6 @@ function CitasPage() {
     setMes(nuevoMes);
   };
 
-  const handleBuscar = (e) => {
-    e.preventDefault();
-    setTerminoBuscado(busqueda.trim());
-  };
-
   const handleCancelar = async (id) => {
     if (!window.confirm('¿Deseas cancelar esta cita?')) return;
     try {
@@ -79,29 +66,11 @@ function CitasPage() {
     setRefreshTrigger((prev) => prev + 1);
   };
 
-  const mostrandoBusqueda = Boolean(terminoBuscado);
-
   return (
     <div className="page">
       <div className="page-header">
         <h1>Citas</h1>
         <button onClick={() => setModalAbierto(true)}>+ Agregar nueva cita</button>
-      </div>
-
-      <div className="panel-busqueda">
-        <form className="formulario-busqueda" onSubmit={handleBuscar}>
-          <input
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por nombre del paciente"
-          />
-          <button type="submit">Buscar</button>
-          {mostrandoBusqueda && (
-            <button type="button" className="boton-claro" onClick={() => { setBusqueda(''); setTerminoBuscado(''); }}>
-              Limpiar
-            </button>
-          )}
-        </form>
       </div>
 
       {error && <p className="alerta alerta-error" role="alert">{error}</p>}
@@ -117,16 +86,16 @@ function CitasPage() {
         />
 
         <AgendaDia
-          titulo={mostrandoBusqueda ? 'RESULTADOS DE BÚSQUEDA' : 'DÍA SELECCIONADO'}
-          subtitulo={mostrandoBusqueda ? `"${terminoBuscado}"` : fechaSeleccionada}
-          citas={mostrandoBusqueda ? resultadosBusqueda : citasDelDia}
-          mostrarFecha={mostrandoBusqueda}
+          titulo="DÍA SELECCIONADO"
+          subtitulo={fechaSeleccionada}
+          citas={citasDelDia}
+          mostrarFecha={false}
           onCancelar={handleCancelar}
-          mensajeVacio={
-            mostrandoBusqueda
-              ? { titulo: 'No se encontraron resultados', texto: 'No existe ninguna cita para ese paciente.', mostrarBoton: false }
-              : { titulo: 'No hay citas este día', texto: 'Agrega una cita para organizar la agenda médica.', mostrarBoton: true }
-          }
+          mensajeVacio={{
+            titulo: 'No hay citas este día',
+            texto: 'Agrega una cita para organizar la agenda médica.',
+            mostrarBoton: true
+          }}
         />
       </section>
 

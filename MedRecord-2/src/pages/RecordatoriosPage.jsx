@@ -4,10 +4,10 @@ import {
   consultarMedicamentosRecordatorio,
   consultarRecordatorios,
   consultarTratamientosRecordatorio,
-  consultarUsuarios,
   crearRecordatorio,
   marcarRecordatorioAtendido
 } from '../api/recordatorios';
+import { useAuth } from '../auth/useAuth';
 
 function fechaLocalParaInput() {
   const fecha = new Date();
@@ -16,7 +16,6 @@ function fechaLocalParaInput() {
 }
 
 const FORMULARIO_INICIAL = {
-  id_usuario: '',
   tipo: 'cita',
   fecha: fechaLocalParaInput(),
   hora: '',
@@ -40,16 +39,13 @@ function fechaHoraLegible(fechaHora) {
 
 function RecordatoriosPage() {
   const [formulario, setFormulario] = useState(FORMULARIO_INICIAL);
-  const [usuarios, setUsuarios] = useState([]);
+  const { usuario } = useAuth();
   const [citas, setCitas] = useState([]);
   const [tratamientos, setTratamientos] = useState([]);
   const [medicamentos, setMedicamentos] = useState([]);
   const [recordatorios, setRecordatorios] = useState([]);
-  const [busqueda, setBusqueda] = useState('');
-  const [estado, setEstado] = useState('pendientes');
-  const [filtros, setFiltros] = useState({ busqueda: '', estado: 'pendientes' });
   const [cargandoReferencias, setCargandoReferencias] = useState(true);
-  const [cargando, setCargando] = useState(false);
+  const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [actualizacion, setActualizacion] = useState(0);
@@ -57,22 +53,15 @@ function RecordatoriosPage() {
   useEffect(() => {
     let activo = true;
     Promise.all([
-      consultarUsuarios(),
       consultarCitasRecordatorio(),
       consultarTratamientosRecordatorio(),
       consultarMedicamentosRecordatorio()
     ])
-      .then(([usuariosData, citasData, tratamientosData, medicamentosData]) => {
+      .then(([citasData, tratamientosData, medicamentosData]) => {
         if (!activo) return;
-        setUsuarios(usuariosData);
         setCitas(citasData);
         setTratamientos(tratamientosData);
         setMedicamentos(medicamentosData);
-        setCargando(Boolean(usuariosData[0]));
-        setFormulario((prev) => ({
-          ...prev,
-          id_usuario: prev.id_usuario || String(usuariosData[0]?.id_usuario || '')
-        }));
       })
       .catch((err) => {
         if (activo) setError(err.message);
@@ -87,10 +76,8 @@ function RecordatoriosPage() {
   }, []);
 
   useEffect(() => {
-    if (!formulario.id_usuario) return undefined;
-
     let activo = true;
-    consultarRecordatorios(formulario.id_usuario)
+    consultarRecordatorios()
       .then((datos) => {
         if (activo) setRecordatorios(datos);
       })
@@ -104,14 +91,9 @@ function RecordatoriosPage() {
     return () => {
       activo = false;
     };
-  }, [formulario.id_usuario, actualizacion]);
+  }, [actualizacion]);
 
-  const citasDelUsuario = useMemo(
-    () => citas.filter((cita) => String(cita.id_usuario) === formulario.id_usuario),
-    [citas, formulario.id_usuario]
-  );
   const resolverDetalles = useCallback((recordatorio) => {
-    const usuario = usuarios.find((item) => String(item.id_usuario) === String(recordatorio.id_usuario));
     if (recordatorio.tipo === 'cita') {
       const cita = citas.find((item) => String(item.id_cita) === String(recordatorio.id_cita));
       return {
@@ -139,21 +121,15 @@ function RecordatoriosPage() {
           ].filter(Boolean).join(' · ')
           : ''
     };
-  }, [citas, medicamentos, tratamientos, usuarios]);
+  }, [citas, medicamentos, tratamientos, usuario]);
 
-  const recordatoriosFiltrados = useMemo(() => {
-    const termino = filtros.busqueda.trim().toLocaleLowerCase();
-    return recordatorios.filter((recordatorio) => {
-      const detalles = resolverDetalles(recordatorio);
-      const coincideTexto = !termino
-        || `${detalles.titulo} ${detalles.paciente}`.toLocaleLowerCase().includes(termino);
-      const coincideEstado = filtros.estado === 'todos'
-        || (filtros.estado === 'pendientes'
-          ? recordatorio.estado === 'pendiente'
-          : recordatorio.estado === 'completado');
-      return coincideTexto && coincideEstado;
-    });
-  }, [filtros, recordatorios, resolverDetalles]);
+  // Primero los pendientes (del más próximo al más lejano) y al final los atendidos.
+  const recordatoriosOrdenados = useMemo(() => [...recordatorios].sort((a, b) => {
+    const pendienteA = a.estado === 'pendiente' ? 0 : 1;
+    const pendienteB = b.estado === 'pendiente' ? 0 : 1;
+    if (pendienteA !== pendienteB) return pendienteA - pendienteB;
+    return new Date(a.fecha_hora) - new Date(b.fecha_hora);
+  }), [recordatorios]);
 
   const manejarCambio = (evento) => {
     const { name, value } = evento.target;
@@ -162,19 +138,11 @@ function RecordatoriosPage() {
       [name]: value,
       ...(name === 'tipo' ? { id_cita: '', id_medicamento: '' } : {})
     }));
-    if (name === 'id_usuario') {
-      setRecordatorios([]);
-      setCargando(Boolean(value));
-    }
   };
 
   const guardarRecordatorio = async (evento) => {
     evento.preventDefault();
     setError('');
-    if (!formulario.id_usuario) {
-      setError('Selecciona un usuario para asociar el recordatorio.');
-      return;
-    }
 
     const fechaHora = new Date(`${formulario.fecha}T${formulario.hora}:00`);
     if (Number.isNaN(fechaHora.getTime())) {
@@ -184,7 +152,6 @@ function RecordatoriosPage() {
     setGuardando(true);
     try {
       await crearRecordatorio({
-        id_usuario: Number(formulario.id_usuario),
         tipo: formulario.tipo,
         fecha_hora: fechaHora.toISOString(),
         anticipacion_minutos: Number(formulario.anticipacion_minutos),
@@ -196,22 +163,13 @@ function RecordatoriosPage() {
           : null
       });
       setCargando(true);
-      setFormulario((prev) => ({
-        ...FORMULARIO_INICIAL,
-        id_usuario: prev.id_usuario,
-        fecha: fechaLocalParaInput()
-      }));
+      setFormulario({ ...FORMULARIO_INICIAL, fecha: fechaLocalParaInput() });
       setActualizacion((prev) => prev + 1);
     } catch (err) {
       setError(err.message);
     } finally {
       setGuardando(false);
     }
-  };
-
-  const buscar = (evento) => {
-    evento.preventDefault();
-    setFiltros({ busqueda, estado });
   };
 
   const marcarAtendido = async (id) => {
@@ -243,24 +201,6 @@ function RecordatoriosPage() {
       <section className="recordatorio-formulario-contenedor">
         <form className="recordatorio-formulario" onSubmit={guardarRecordatorio}>
           <div className="recordatorio-campo">
-            <label htmlFor="recordatorio-usuario">Usuario</label>
-            <select
-              id="recordatorio-usuario"
-              name="id_usuario"
-              value={formulario.id_usuario}
-              onChange={manejarCambio}
-              required
-              disabled={cargandoReferencias || usuarios.length === 0}
-            >
-              <option value="">Selecciona un usuario</option>
-              {usuarios.map((usuario) => (
-                <option key={usuario.id_usuario} value={usuario.id_usuario}>
-                  {nombreUsuario(usuario)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="recordatorio-campo">
             <label htmlFor="recordatorio-tipo">Tipo</label>
             <select
               id="recordatorio-tipo"
@@ -282,7 +222,7 @@ function RecordatoriosPage() {
                 onChange={manejarCambio}
               >
                 <option value="">Sin cita asociada</option>
-                {citasDelUsuario.map((cita) => (
+                {citas.map((cita) => (
                   <option key={cita.id_cita} value={cita.id_cita}>
                     {cita.especialidad} · {cita.fecha} {cita.hora}
                   </option>
@@ -344,49 +284,26 @@ function RecordatoriosPage() {
             />
           </div>
           <div className="recordatorio-acciones recordatorio-campo-completo">
-            <button type="submit" disabled={guardando || cargandoReferencias || usuarios.length === 0}>
+            <button type="submit" disabled={guardando || cargandoReferencias}>
               {guardando ? 'Guardando...' : 'Guardar recordatorio'}
             </button>
-            {usuarios.length === 0 && !cargandoReferencias && (
-              <span className="texto-suave">Registra un usuario antes de crear recordatorios.</span>
-            )}
+            <span className="texto-suave">
+              La alerta llegará a {usuario?.correo} con la anticipación indicada.
+            </span>
           </div>
-        </form>
-      </section>
-
-      <section className="panel-busqueda">
-        <form className="formulario-busqueda" onSubmit={buscar}>
-          <input
-            type="text"
-            name="busqueda"
-            value={busqueda}
-            onChange={(evento) => setBusqueda(evento.target.value)}
-            placeholder="Buscar por paciente o título"
-          />
-          <select
-            name="estado"
-            aria-label="Estado"
-            value={estado}
-            onChange={(evento) => setEstado(evento.target.value)}
-          >
-            <option value="pendientes">Pendientes</option>
-            <option value="atendidos">Atendidos</option>
-            <option value="todos">Todos</option>
-          </select>
-          <button type="submit">Buscar</button>
         </form>
       </section>
 
       <section className="lista-recordatorios" aria-live="polite">
         {cargando ? (
           <p className="texto-suave">Cargando...</p>
-        ) : recordatoriosFiltrados.length === 0 ? (
+        ) : recordatoriosOrdenados.length === 0 ? (
           <div className="sin-citas">
             <h4>No hay recordatorios para mostrar</h4>
-            <p>Registra uno nuevo o cambia los filtros.</p>
+            <p>Registra uno nuevo con el formulario de arriba.</p>
           </div>
         ) : (
-          recordatoriosFiltrados.map((recordatorio) => {
+          recordatoriosOrdenados.map((recordatorio) => {
             const detalles = resolverDetalles(recordatorio);
             const atendido = recordatorio.estado === 'completado';
             const cancelado = recordatorio.estado === 'cancelado';
@@ -406,6 +323,9 @@ function RecordatoriosPage() {
                   <h3>{detalles.titulo}</h3>
                   <p><strong>Paciente:</strong> {detalles.paciente}</p>
                   {detalles.descripcion && <p>{detalles.descripcion}</p>}
+                  {recordatorio.enviado && (
+                    <p className="recordatorio-enviado">✉ Alerta enviada por correo</p>
+                  )}
                 </div>
                 {!atendido && !cancelado && (
                   <button

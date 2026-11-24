@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { consultarCatalogos } from '../api/catalogos';
 import { crearMedicamento } from '../api/medicamentos';
 
 function RegistrarMedicamento({ onSuccess }) {
@@ -16,12 +17,43 @@ function RegistrarMedicamento({ onSuccess }) {
     indicaciones: ''
   });
 
+  const [grupos, setGrupos] = useState([]);
+
+  useEffect(() => {
+    let activo = true;
+    consultarCatalogos()
+      .then((catalogos) => {
+        if (activo) setGrupos(catalogos.medicamentos);
+      })
+      .catch(() => {
+        if (activo) setError('No se pudo cargar la lista de medicamentos.');
+      });
+    return () => {
+      activo = false;
+    };
+  }, []);
+
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
+
+  // Al elegir un medicamento se proponen sus unidades habituales (se pueden cambiar).
+  const elegirMedicamento = (e) => {
+    const nombre = e.target.value;
+    const item = grupos.flatMap((grupo) => grupo.items).find((m) => m.nombre === nombre);
+    setForm({
+      ...form,
+      nombre,
+      ...(item ? { dosis_unidad: item.dosis_unidad, cantidad_unidad: item.cantidad_unidad } : {})
+    });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    if (!form.nombre) {
+      setError('Selecciona un medicamento de la lista.');
+      return;
+    }
     try {
       await crearMedicamento(form);
       onSuccess();
@@ -36,8 +68,23 @@ function RegistrarMedicamento({ onSuccess }) {
       {error && <div className="alerta alerta-error" role="alert">{error}</div>}
       <form onSubmit={handleSubmit} className="form-vertical">
 
-        <label className="campo-label">Nombre</label>
-        <input name="nombre" value={form.nombre} onChange={handleChange} placeholder="Ej. Paracetamol" />
+        <label className="campo-label" htmlFor="nombre-medicamento">Medicamento</label>
+        <select
+          id="nombre-medicamento"
+          name="nombre"
+          value={form.nombre}
+          onChange={elegirMedicamento}
+          required
+        >
+          <option value="">Selecciona un medicamento</option>
+          {grupos.map((grupo) => (
+            <optgroup key={grupo.categoria} label={grupo.categoria}>
+              {grupo.items.map((item) => (
+                <option key={item.nombre} value={item.nombre}>{item.nombre}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
 
         <label className="campo-label">Dosis</label>
         <div className="campo-con-unidad">

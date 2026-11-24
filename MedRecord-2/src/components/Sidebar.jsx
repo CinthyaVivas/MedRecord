@@ -1,8 +1,18 @@
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/useAuth';
 
 function Sidebar() {
   const [colapsado, setColapsado] = useState(false);
+  const { usuario, salir } = useAuth();
+  const navegar = useNavigate();
+
+  const cerrarSesion = () => {
+    salir();
+    navegar('/login', { replace: true });
+  };
+
+  const nombre = `${usuario?.nombre || ''} ${usuario?.apellido || ''}`.trim() || usuario?.correo;
 
   return (
     <aside className={`sidebar ${colapsado ? 'sidebar-colapsado' : ''}`}>
@@ -57,6 +67,29 @@ function Sidebar() {
   {!colapsado && <span>Recordatorios</span>}
 </NavLink>
       </nav>
+
+      <div className="sidebar-usuario">
+        {!colapsado && (
+          <div className="sidebar-usuario-datos">
+            <strong>{nombre}</strong>
+            <span>{usuario?.correo}</span>
+          </div>
+        )}
+        <button
+          type="button"
+          className="sidebar-salir"
+          onClick={cerrarSesion}
+          aria-label="Cerrar sesión"
+          title="Cerrar sesión"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+            <path d="M10 17l-5-5 5-5" />
+            <path d="M5 12h11" />
+          </svg>
+          {!colapsado && <span>Cerrar sesión</span>}
+        </button>
+      </div>
     </aside>
   );
 }
