@@ -21,6 +21,10 @@ ALLOWED_HOSTS = [
     for host in os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
     if host.strip()
 ]
+# Render publica el dominio del servicio en esta variable (ej. medrecord-api.onrender.com)
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -38,6 +42,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # Sirve los archivos estáticos (estilos del panel /admin/) en producción
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -77,6 +83,23 @@ DATABASES = {
     }
 }
 
+# En Render (u otro proveedor) la base de datos llega como una sola URL:
+# postgresql://usuario:clave@servidor:puerto/base
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL:
+    from urllib.parse import unquote, urlparse
+
+    _url = urlparse(DATABASE_URL)
+    DATABASES['default'].update({
+        'NAME': unquote(_url.path.lstrip('/')),
+        'USER': unquote(_url.username or ''),
+        'PASSWORD': unquote(_url.password or ''),
+        'HOST': _url.hostname or '',
+        'PORT': str(_url.port or 5432),
+        'CONN_MAX_AGE': 60,
+        'CONN_HEALTH_CHECKS': True,
+    })
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
@@ -93,6 +116,11 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'},
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -165,3 +193,24 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
     'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173',
 ).split(',')
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS if origin.strip()]
+
+# ---------------------------------------------------------------------------
+# Producción (HTTPS). Solo se activa cuando DJANGO_DEBUG=false.
+# ---------------------------------------------------------------------------
+CSRF_TRUSTED_ORIGINS = [
+    origen.strip()
+    for origen in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origen.strip()
+]
+if RENDER_EXTERNAL_HOSTNAME:
+    CSRF_TRUSTED_ORIGINS.append(f'https://{RENDER_EXTERNAL_HOSTNAME}')
+
+if not DEBUG:
+    # Render atiende el HTTPS y le avisa a Django con este encabezado.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SECURE_REDIRECT_EXEMPT = [r'^salud/$']  # chequeo de salud interno de Render
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
+    SECURE_CONTENT_TYPE_NOSNIFF = True
