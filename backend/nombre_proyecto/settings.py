@@ -40,6 +40,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Debe ir primero: responde el chequeo de salud de Render sin validar el dominio
+    'nombre_proyecto.salud.SaludMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     # Sirve los archivos estáticos (estilos del panel /admin/) en producción
@@ -209,7 +211,6 @@ if not DEBUG:
     # Render atiende el HTTPS y le avisa a Django con este encabezado.
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
-    SECURE_REDIRECT_EXEMPT = [r'^salud/$']  # chequeo de salud interno de Render
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
